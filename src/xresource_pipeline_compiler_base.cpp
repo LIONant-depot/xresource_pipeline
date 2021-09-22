@@ -50,10 +50,10 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
     // Create the switches and their rules
     //
     {
-        const auto idBuildType = CmdLineParser.AddCmdSwitch( xcore::string::const_crc("BUILDTYPE"),  1,  1, 0, 1, true, xcore::cmdline::type::STRING, true );
-        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("LIBRARY"),    1,  1, 1, 1, false, xcore::cmdline::type::STRING, false, idBuildType );
-        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("TARGET"),     1, -1, 1, 1, false, xcore::cmdline::type::STRING, false, idBuildType );
-        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("INPUT"),      1,  1, 1, 1, false, xcore::cmdline::type::STRING, false, idBuildType );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("BUILDTYPE"),  1,  1, 0, 1, false );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("TARGET"),     1, -1, 1, 1, false );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("LIBRARY"),    1,  1, 1, 1, true );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("INPUT"),      1,  1, 1, 1, true );
     }
     
     //
@@ -71,7 +71,7 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
                   "-------------------------------------------------------------\n"
                   "QLION - Compiler system.                                     \n"
                   "%s [ %s - %s ]                                               \n"
-                  "Switches:                                                    \n"
+                  "Switches: (Make sure they are in order)                      \n"
                   "     -BUILDTYPE  O0 - Compile as fast as possible            \n"
                   "                 Q1 - Compile with optimizations             \n"
                   "                 Qz - Maximum performance for asset          \n"
@@ -137,13 +137,7 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
             xcore::string::CleanPath(m_LibraryPath);
 
             if( auto Err = m_LibraryGuid.setupFromPath( m_LibraryPath ); Err )
-            {
-                XLOG_CHANNEL_ERROR( m_LogChannel, "Fail to get the GUID for the library (%s) [%s]"
-                                  , m_LibraryPath.data()
-                                  , Err.getCode().m_pString
-                                  );
                 return Err;
-            }
 
             // set the path to the root
             xcore::string::CleanPath( xcore::types::lvalue(xcore::string::Fmt( "%s/../../..", static_cast<const char*>(m_LibraryPath) )) );
@@ -158,22 +152,13 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
         }
         else if( CmdCRC == xcore::types::value<xcore::crc<32>::FromString( "INPUT" )> )
         {
-            const int Index = xcore::string::findLastInstance( Cmd.getArgument(0), '.' );
-            if( Index == -1 )
-                return xerr_failure_s( "Resource GUID is badly form" );
+            if (auto Err = m_RscGuid.setupFromPath(Cmd.getArgument(0)); Err)
+                return Err;
 
-            /// TODO: May be this code should be replace with the setupFromPath??????????
-            {
-                xcore::cstring Temp;
+            if( xcore::string::findLastInstance(Cmd.getArgument(0), '/') == -1 )
+                return xerr_failure_s("Badly formatted input resource expecting ttttt.ttttt/iiiiiiiii but got ttttt.ttttt.iiiiiiiii");
 
-                xcore::string::CopyN( Temp, Cmd.getArgument(0), xcore::cstring::units{ (std::uint32_t)Index });
-                m_RscGuid.m_Instance.setFromStringHex(Temp.data());
-
-                xcore::string::Copy(Temp, &Cmd.getArgument(0)[Index + 1]);
-                m_RscGuid.m_Type.setFromStringHex(Temp.data());
-            }
-
-            m_AssetPath = xcore::string::Fmt( "%s/Assets/%s", m_LibraryPath.data(), Cmd.getArgument(0).data() );
+            m_ResourcePath = xcore::string::Fmt( "%s/Resources/%s", m_LibraryPath.data(), Cmd.getArgument(0).data() );
         }
         else if( CmdCRC == xcore::types::value<xcore::crc<32>::FromString( "BUILDTYPE" )> )
         {
@@ -208,7 +193,7 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
     //
     // Logs data base
     //
-    m_LogsPath = xcore::string::Fmt( "%s/Logs.dbase/Assets/%s", m_CompiledPath.data(), m_RscGuid.getPath().data() );
+    m_LogsPath = xcore::string::Fmt( "%s/Logs.dbase/Resources/%s", m_CompiledPath.data(), m_RscGuid.getPath().data() );
 
     //
     // Create the game data path
@@ -245,7 +230,17 @@ xcore::err base::Parse( int argc, const char *argv[] ) noexcept
 {
     if( auto Err = InternalParse( argc, argv ); Err )
     {
-        XLOG_CHANNEL_ERROR( m_LogChannel, "Parsing error (%s)", Err.getCode().m_pString );
+        if( Err.getCode().getState<xresource_pipeline::error>() != xresource_pipeline::error::DISPLAY_HELP )
+        {
+            // TODO: We should open the log file before this???
+            // XLOG_CHANNEL_ERROR(m_LogChannel, "Parsing error (%s)", Err.getCode().m_pString);
+        }
+        else
+        {
+            // If we are displaying help we just return...
+            Err.clear();
+        }
+        
         return Err;
     }
     
