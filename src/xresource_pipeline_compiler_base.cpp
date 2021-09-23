@@ -40,6 +40,87 @@ base::base( void ) noexcept
     g_pBase = this;
 }
 
+
+//--------------------------------------------------------------------------
+
+xcore::err base::setupPaths( void ) noexcept
+{
+    m_ProjectConfigPath = xcore::string::Fmt("%s/Config", m_ProjectPath.data() );
+
+    //
+    // Lets read the config info file
+    //
+    if( auto Err = xresource_pipeline::config::Serialize( m_ConfigInfo, xcore::string::Fmt("%s/ResourcePipeline.config", m_ProjectConfigPath.data()).data(), true ); Err )
+        return Err;
+
+    //
+    // Check if we can see our resource type in the list...
+    //
+    {
+        for( const auto& E : m_ConfigInfo.m_ResourceTypes )
+        {
+            auto RCFull = getResourcePipelineFullGuid();
+            if( E.m_FullGuid.m_Instance.m_Value == RCFull.m_Instance.m_Value 
+             && E.m_FullGuid.m_Type.m_Value     == RCFull.m_Type.m_Value )
+            {
+                m_ConfigInfoIndex = (int)static_cast<std::size_t>(&E - m_ConfigInfo.m_ResourceTypes.data());
+                break;
+            }
+        }
+        if( m_ConfigInfoIndex == -1 )
+            return xerr_failure_s("Fail to find the resource type inside ResourcePipeline.config");
+    }
+    
+    //
+    // Set the OutputProjectPath
+    //
+    {
+        auto ProjectFullGuidString = m_ConfigInfo.m_ProjectFullGuid.getPath();
+        xcore::string::ReplaceChar(ProjectFullGuidString, '/', '-');
+        m_OutputProjectPath = xcore::string::Fmt( "%s/%s", m_OutputRootPath.data(), ProjectFullGuidString.data() );
+    }
+
+    //
+    // Set the Browser path
+    //
+    m_BrowserPath = xcore::string::Fmt("%s/Browser.dbase/%s/%s", m_OutputProjectPath.data()
+                                                               , m_ConfigInfo.m_ResourceTypes[m_ConfigInfoIndex].m_ResourceTypeName.data()
+                                                               , m_RscGuid.m_Instance.getStringHex<char>().data() 
+                                                               );    
+    if( auto Err = m_LogFile.open( xcore::string::To<wchar_t>(xcore::string::Fmt( "%s/Compilation.log.txt", m_BrowserPath.data() )), "wt"); Err )
+        return xerr_failure_s("Fail to create the log file");
+
+    //
+    // Set path to the resource
+    //
+    m_ResourcePath = xcore::string::Fmt( "%s/Resources/%s/%s", m_ProjectPath.data()
+                                                             , m_ConfigInfo.m_ResourceTypes[m_ConfigInfoIndex].m_ResourceTypeName.data()
+                                                             , m_RscGuid.m_Instance.getStringHex<char>().data()
+                                                             );
+
+    m_ResourceDescriptorPath = xcore::string::Fmt("%s/Descriptor.txt", m_ResourcePath.data() );
+
+    //
+    // Set the output path of the resource
+    //
+    for( auto& E : m_Target )
+    {
+        if( E.m_bValid )
+        {
+            E.m_DataPath = xcore::string::Fmt( "%s/%s.platform/Data", m_OutputProjectPath.data(), xcore::target::getPlatformString(E.m_Platform) );
+        }
+    }
+
+    //
+    // Set the Generated path
+    //
+    m_GeneratedPath = xcore::string::Fmt( "%s/Generated.dbase", m_OutputProjectPath.data() );
+
+
+
+    return {};
+}
+
 //--------------------------------------------------------------------------
 
 xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
@@ -52,7 +133,9 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
     {
         CmdLineParser.AddCmdSwitch( xcore::string::const_crc("BUILDTYPE"),  1,  1, 0, 1, false );
         CmdLineParser.AddCmdSwitch( xcore::string::const_crc("TARGET"),     1, -1, 1, 1, false );
-        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("LIBRARY"),    1,  1, 1, 1, true );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("EDITOR"),     1,  1, 1, 1, false );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("OUTPUT"),     1,  1, 1, 1, false );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("PROJECT"),    1,  1, 1, 1, true );
         CmdLineParser.AddCmdSwitch( xcore::string::const_crc("INPUT"),      1,  1, 1, 1, true );
     }
     
@@ -69,15 +152,17 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
     {
         std::printf( "\n"
                   "-------------------------------------------------------------\n"
-                  "QLION - Compiler system.                                     \n"
+                  "LION - Compiler system.                                      \n"
                   "%s [ %s - %s ]                                               \n"
                   "Switches: (Make sure they are in order)                      \n"
                   "     -BUILDTYPE  O0 - Compile as fast as possible            \n"
                   "                 Q1 - Compile with optimizations             \n"
                   "                 Qz - Maximum performance for asset          \n"
-                  "     -LIBRARY    <NetworkFriendlyPathToLibrary>              \n"
                   "     -TARGET     <WINDOWS OSX IOS ANDROID PS3 TOOLS>         \n"
-                  "     -INPUT      <ASSET_GUID_FULL>                           \n"
+                  "     -EDITOR     <NetworkFriendlyPathToEditor.lion_editor>   \n"
+                  "     -PROJECT    <NetworkFriendlyPathToProject.lion_project> \n"
+                  "     -INPUT      <ASSET_GUID_FULL> Must comes after -PROJECT \n"
+                  "     -OUTPUT     <NetworkFriendlyPathToResource.lion_rcdbase>\n"
                   "-------------------------------------------------------------\n",
                  argv[0],
                  __TIME__, __DATE__ );
@@ -113,9 +198,7 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
                         platform& NewTarget   = m_Target[ip];
                         
                         if( NewTarget.m_bValid )
-                        {
                             return xerr_failure_s("The same platform was enter multiple times");
-                        }
                         
                         NewTarget.m_Platform  = p;
                         NewTarget.m_bValid    = true;
@@ -126,29 +209,32 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
                 }
                 
                if( bFound == false )
-               {
                    return xerr_failure_s("Platform not supported");
-               }
             }
         }
-        else if( CmdCRC == xcore::types::value<xcore::crc<32>::FromString( "LIBRARY" )> )
+        else if( CmdCRC == xcore::types::value<xcore::crc<32>::FromString( "EDITOR" )> )
         {
-            xcore::string::Copy( m_LibraryPath, Cmd.getArgument( 0 ) );
-            xcore::string::CleanPath(m_LibraryPath);
+            if( -1 == xcore::string::FindStr( Cmd.getArgument(0), ".lion_editor") )
+                return xerr_failure_s("I got a path in the EDITOR switch that is not a .lion_editor path");
 
-            if( auto Err = m_LibraryGuid.setupFromPath( m_LibraryPath ); Err )
-                return Err;
+            xcore::string::Copy( m_EditorPath, Cmd.getArgument( 0 ) );
+            xcore::string::CleanPath(m_EditorPath);
+        }
+        else if( CmdCRC == xcore::types::value<xcore::crc<32>::FromString( "OUTPUT" )> )
+        {
+            if (-1 == xcore::string::FindStr( Cmd.getArgument(0), ".lion_rcdata"))
+                return xerr_failure_s("I got a path in the OUTPUT switch that is not a .lion_rcdata path");
 
-            // set the path to the root
-            xcore::string::CleanPath( xcore::types::lvalue(xcore::string::Fmt( "%s/../../..", static_cast<const char*>(m_LibraryPath) )) );
+            xcore::string::Copy(m_OutputRootPath, Cmd.getArgument( 0 ) );
+            xcore::string::CleanPath(m_OutputRootPath);
+        }
+        else if( CmdCRC == xcore::types::value<xcore::crc<32>::FromString( "PROJECT" )> )
+        {
+            if (-1 == xcore::string::FindStr( Cmd.getArgument(0), ".lion_project"))
+                return xerr_failure_s("I got a path in the PROJECT switch that is not a .lion_project path");
 
-            // Compiled path for this resource
-            m_CompiledPath = xcore::string::Fmt( "%s/Compiled.dbase/Resources/%s/"
-                                                , m_QLionPath.data()
-                                                , m_LibraryGuid.getPath().data() );
-
-            // External asset paths
-            m_ExternalAssetsPath = xcore::string::Fmt( "%s/Assets", m_CompiledPath.data() );
+            xcore::string::Copy( m_ProjectPath, Cmd.getArgument( 0 ) );
+            xcore::string::CleanPath(m_ProjectPath);
         }
         else if( CmdCRC == xcore::types::value<xcore::crc<32>::FromString( "INPUT" )> )
         {
@@ -157,8 +243,6 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
 
             if( xcore::string::findLastInstance(Cmd.getArgument(0), '/') == -1 )
                 return xerr_failure_s("Badly formatted input resource expecting ttttt.ttttt/iiiiiiiii but got ttttt.ttttt.iiiiiiiii");
-
-            m_ResourcePath = xcore::string::Fmt( "%s/Resources/%s", m_LibraryPath.data(), Cmd.getArgument(0).data() );
         }
         else if( CmdCRC == xcore::types::value<xcore::crc<32>::FromString( "BUILDTYPE" )> )
         {
@@ -193,18 +277,8 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
     //
     // Logs data base
     //
-    m_LogsPath = xcore::string::Fmt( "%s/Logs.dbase/Resources/%s", m_CompiledPath.data(), m_RscGuid.getPath().data() );
-
-    //
-    // Create the game data path
-    //
-    for ( auto& NewTarget : m_Target )
-    {
-        if( NewTarget.m_bValid == false )
-            continue;
-
-        NewTarget.m_CompiledBinPath = xcore::string::Fmt( "%s/%s.platform", m_CompiledPath.data(), xcore::target::getPlatformString( NewTarget.m_Platform ) );
-    }
+    if( auto Err = setupPaths(); Err )
+        return Err;
 
     //
     // Make sure that the paths exists
@@ -221,7 +295,7 @@ xcore::cstring base::getDestinationPath( xcore::target::platform p ) const noexc
     const int Index = static_cast<int>(p);
     xassert( m_Target[Index].m_bValid );
     xassert( m_Target[Index].m_Platform == p );
-    return xcore::string::Fmt( "%s/Data/%s", m_Target[Index].m_CompiledBinPath.data(), m_RscGuid.getPath().data() );
+    return m_Target[Index].m_DataPath;
 }
 
 //--------------------------------------------------------------------------
@@ -256,9 +330,10 @@ xcore::err base::Compile( void ) noexcept
     //
     // Create the log folder
     //
+    /*
     {
         std::error_code         ec;
-        std::filesystem::path   LogPath { xcore::string::To<wchar_t>(m_LogsPath).data() };
+        std::filesystem::path   LogPath { xcore::string::To<wchar_t>(m_BrowserPath).data() };
 
         std::filesystem::create_directories( LogPath, ec );
         if( ec )
@@ -267,7 +342,7 @@ xcore::err base::Compile( void ) noexcept
             return xerr_failure_s( "Fail to create the log directory" );
         }
     }
-
+    */
     //
     // Create log file per platform
     //
@@ -295,6 +370,7 @@ xcore::err base::Compile( void ) noexcept
     //
     // Create the log 
     //
+    /*
     {
         xcore::cstring Path;
         Path = xcore::string::Fmt( "%s/Log.txt", m_LogsPath.data() );
@@ -304,7 +380,7 @@ xcore::err base::Compile( void ) noexcept
             return xerr_failure_s( "Fail to create the log file" );
         }
     }
-
+    */
     //
     // Get the timer
     //

@@ -3,7 +3,7 @@ namespace xresource_pipeline::compiler
     //
     // Input to compilers
     // ------------------
-    // -BUILDTYPE Oz -TARGET WINDOWS -LIBRARY "Path to the library" -RESOURCE ff.ff/ff
+    // -BUILDTYPE Oz -TARGET WINDOWS -EDITOR "Path to the editor root" -PROJECT "Path to the project root" -RESOURCE ff.ff/ff -OUTPUT "Path to a resource .dbase"
     //
     class base
     {
@@ -22,8 +22,7 @@ namespace xresource_pipeline::compiler
         {
             bool                    m_bValid            { false };                              // If we need to build for this platform
             xcore::target::platform m_Platform          { xcore::target::platform::WINDOWS };   // Platform that we need to compile for
-            xcore::cstring          m_CompiledBinPath   {};                                     // This is where the compiler need to drop all the compiled data
-            xcore::file::stream     m_LogFile           {};
+            xcore::cstring          m_DataPath          {};                                     // This is where the compiler need to drop all the compiled data
         };
 
     public:
@@ -32,6 +31,7 @@ namespace xresource_pipeline::compiler
                                                         base                        ( void )                                                        noexcept;
                             xcore::err                  Compile                     ( void )                                                        noexcept;
                             xcore::err                  Parse                       ( int argc, const char* argv[] )                                noexcept;
+        virtual             xcore::guid::rcfull<>       getResourcePipelineFullGuid ( void )                                                const   noexcept = 0;
 
     protected:
         
@@ -39,23 +39,34 @@ namespace xresource_pipeline::compiler
                             xcore::cstring              getDestinationPath          ( xcore::target::platform p )                           const   noexcept;
 
         virtual             xcore::err                  onCompile                   ( void )                                                        noexcept = 0;
+                            xcore::err                  setupPaths                  ( void )                                                        noexcept;
 
     protected:
         
         build_type                                              m_BuildType             {};
         std::chrono::steady_clock::time_point                   m_Timmer                {};
-        xcore::cstring                                          m_LibraryPath           {}; // Where the resource is located
-        xcore::cstring                                          m_ResourcePath          {}; // Path to the asset 
+        xcore::cstring                                          m_ProjectPath           {}; // Project or Library that contains the resource (note that this is the root)
         xcore::guid::rcfull<>                                   m_RscGuid               {}; // GUID of the resource
-        xcore::guid::rcfull<>                                   m_LibraryGuid           {}; // GUID of the library or project that has the asset
-        xcore::cstring                                          m_QLionPath             {}; // ??????
-        xcore::cstring                                          m_CompiledPath          {}; // Compiled asset path for the given project/library
-        xcore::cstring                                          m_ExternalAssetsPath    {};
-        xcore::cstring                                          m_LogsPath              {};
+        xcore::cstring                                          m_EditorPath            {};
+        xcore::cstring                                          m_OutputRootPath        {};
+        xcore::cstring                                          m_OutputProjectPath     {};
+
+        xcore::cstring                                          m_ProjectConfigPath     {};
+
+        xcore::cstring                                          m_ResourcePath          {}; // Path to the asset 
+        xcore::cstring                                          m_ResourceDescriptorPath{}; // Path to the asset 
+
+        xcore::cstring                                          m_GeneratedPath         {};
+   //     xcore::cstring                                          m_CompiledPath          {}; // Compiled asset path for the given project/library
+   //     xcore::cstring                                          m_ExternalAssetsPath    {};
+
+        xcore::cstring                                          m_BrowserPath           {};
         xcore::file::stream                                     m_LogFile               {};
         std::array<platform, xcore::target::getPlatformCount()> m_Target                {};
         xcore::log::channel                                     m_LogChannel            { "COMPILER" };
-
+        config::info                                            m_ConfigInfo            {};
+        int                                                     m_ConfigInfoIndex       {-1};
+    
     protected:
 
         friend void LogFunction(const xcore::log::channel& Channel, xcore::log::msg_type Type, const char* String, int Line, const char* file) noexcept;
