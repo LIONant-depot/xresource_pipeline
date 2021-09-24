@@ -29,17 +29,19 @@ namespace xresource_pipeline::compiler
         
         virtual                                        ~base                        ( void )                                                        noexcept = default;
                                                         base                        ( void )                                                        noexcept;
+
                             xcore::err                  Compile                     ( void )                                                        noexcept;
                             xcore::err                  Parse                       ( int argc, const char* argv[] )                                noexcept;
-        virtual             xcore::guid::rcfull<>       getResourcePipelineFullGuid ( void )                                                const   noexcept = 0;
 
     protected:
         
                             xcore::err                  InternalParse               ( const int argc, const char *argv[] )                          noexcept;
                             xcore::cstring              getDestinationPath          ( xcore::target::platform p )                           const   noexcept;
 
+        virtual             xcore::guid::rcfull<>       getResourcePipelineFullGuid ( void )                                                const   noexcept = 0;
         virtual             xcore::err                  onCompile                   ( void )                                                        noexcept = 0;
                             xcore::err                  setupPaths                  ( void )                                                        noexcept;
+                            xcore::err                  CreatePath                  ( const xcore::cstring& Path )                          const   noexcept;
 
     protected:
         
@@ -50,6 +52,8 @@ namespace xresource_pipeline::compiler
         xcore::cstring                                          m_EditorPath            {};
         xcore::cstring                                          m_OutputRootPath        {};
         xcore::cstring                                          m_OutputProjectPath     {};
+        xcore::cstring                                          m_CompilerConfigPath    {};
+        xcore::cstring                                          m_CompilerConfigPathFile{};
 
         xcore::cstring                                          m_ProjectConfigPath     {};
 

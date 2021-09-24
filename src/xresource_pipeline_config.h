@@ -1,5 +1,8 @@
 namespace xresource_pipeline::config
 {
+    constexpr std::int32_t      version_v   = 1;
+    constexpr std::int32_t      revision_v  = 1;
+
     //
     // This resource pipeline config file can be found in project config directories.
     // The editor will also have a config file in its directory and is the one 
@@ -19,8 +22,10 @@ namespace xresource_pipeline::config
 
     struct info
     {
-        xcore::guid::rcfull<>       m_ProjectFullGuid;          // Full guid of the project
-        std::vector<resource_type>  m_ResourceTypes;            // List of resource types that we can handle
+        std::int32_t                m_Version                   {version_v};
+        std::int32_t                m_Revision                  {revision_v};
+        xcore::guid::rcfull<>       m_ProjectFullGuid           {};             // Full guid of the project
+        std::vector<resource_type>  m_ResourceTypes             {};             // List of resource types that we can handle
     };
 
     inline
@@ -40,10 +45,18 @@ namespace xresource_pipeline::config
                 xcore::cstring  FullGuid;
                 if (false == isRead) FullGuid = Info.m_ProjectFullGuid.getPath();
 
-                Err = Stream.Field( "ProjectFullGuid", FullGuid );
+                    (Err = Stream.Field("Version", Info.m_Version, Info.m_Revision ) )
+                ||  (Err = Stream.Field("ProjectFullGuid", FullGuid));
 
                 if (isRead && !Err) Err = Info.m_ProjectFullGuid.setupFromPath(FullGuid);
             })) return Error;
+
+        // Check for version issues
+        if( Info.m_Version > version_v ) 
+            return xerr_failure_s("The resource pipeline in the project is newer than this compiler. Please make sure your compiler is up to date");
+
+        if( Info.m_Revision > revision_v )
+            printf("WARNING: The resource pipeline in the project is newer than this compiler. It is recommended that all compilers are up to date");
 
         // Deal with each type of resource
         if( Stream.Record( Error, "ResourceTypes"

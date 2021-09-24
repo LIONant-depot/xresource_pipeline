@@ -10,7 +10,7 @@ base* g_pBase = nullptr;
 void LogFunction( const xcore::log::channel& Channel, xcore::log::msg_type Type, const char* pString, int Line, const char* file ) noexcept
 {
     auto Message = xcore::string::Fmt
-    ( "%s(%d) [%s] %s/n"
+    ( "%s(%d) [%s] %s\n"
     , file ? file : "Unkown file"
     , Line
     , xcore::log::msg_type::L_INFO    == Type ? "Info"
@@ -70,7 +70,22 @@ xcore::err base::setupPaths( void ) noexcept
         if( m_ConfigInfoIndex == -1 )
             return xerr_failure_s("Fail to find the resource type inside ResourcePipeline.config");
     }
-    
+
+    //
+    // Set the compiler default config path
+    //
+    if( m_ConfigInfo.m_ResourceTypes[m_ConfigInfoIndex].m_bDefaultSettingInEditor )
+    {
+        m_CompilerConfigPath = xcore::string::Fmt( "%s/Resources/ResourcePipeline.plugins", m_EditorPath.data() );
+    }
+    else
+    {
+        m_CompilerConfigPath = xcore::string::Fmt("%s/Resources/ResourcePipeline.plugins", m_ProjectPath.data() );
+    }
+    m_CompilerConfigPathFile = xcore::string::Fmt("%s/%s/DefaultDescriptor.txt"
+        , m_CompilerConfigPath.data()
+        , m_ConfigInfo.m_ResourceTypes[m_ConfigInfoIndex].m_ResourceTypeName.data());
+
     //
     // Set the OutputProjectPath
     //
@@ -81,12 +96,26 @@ xcore::err base::setupPaths( void ) noexcept
     }
 
     //
+    // Set the output path of the resource
+    //
+    for (auto& E : m_Target)
+    {
+        if (E.m_bValid)
+        {
+            E.m_DataPath = xcore::string::Fmt("%s/%s.platform/Data", m_OutputProjectPath.data(), xcore::target::getPlatformString(E.m_Platform));
+        }
+    }
+
+    //
     // Set the Browser path
     //
     m_BrowserPath = xcore::string::Fmt("%s/Browser.dbase/%s/%s", m_OutputProjectPath.data()
                                                                , m_ConfigInfo.m_ResourceTypes[m_ConfigInfoIndex].m_ResourceTypeName.data()
                                                                , m_RscGuid.m_Instance.getStringHex<char>().data() 
-                                                               );    
+                                                               );
+    if( auto Err = CreatePath(m_BrowserPath); Err )
+        return Err;
+
     if( auto Err = m_LogFile.open( xcore::string::To<wchar_t>(xcore::string::Fmt( "%s/Compilation.log.txt", m_BrowserPath.data() )), "wt"); Err )
         return xerr_failure_s("Fail to create the log file");
 
@@ -101,21 +130,9 @@ xcore::err base::setupPaths( void ) noexcept
     m_ResourceDescriptorPath = xcore::string::Fmt("%s/Descriptor.txt", m_ResourcePath.data() );
 
     //
-    // Set the output path of the resource
-    //
-    for( auto& E : m_Target )
-    {
-        if( E.m_bValid )
-        {
-            E.m_DataPath = xcore::string::Fmt( "%s/%s.platform/Data", m_OutputProjectPath.data(), xcore::target::getPlatformString(E.m_Platform) );
-        }
-    }
-
-    //
     // Set the Generated path
     //
     m_GeneratedPath = xcore::string::Fmt( "%s/Generated.dbase", m_OutputProjectPath.data() );
-
 
 
     return {};
@@ -323,6 +340,23 @@ xcore::err base::Parse( int argc, const char *argv[] ) noexcept
 
 //--------------------------------------------------------------------------
 
+xcore::err base::CreatePath( const xcore::cstring& Path ) const noexcept
+{
+    std::error_code         ec;
+    std::filesystem::path   path{ xcore::string::To<wchar_t>(Path).data() };
+
+    std::filesystem::create_directories(path, ec);
+    if (ec)
+    {
+        XLOG_CHANNEL_ERROR(m_LogChannel, "Fail to create a directory [%s] with error [%s]", Path.data(), ec.message().c_str());
+        return xerr_failure_s("Fail to create a directory");
+    }
+
+    return {};
+}
+
+//--------------------------------------------------------------------------
+
 xcore::err base::Compile( void ) noexcept
 {
     m_Timmer = std::chrono::steady_clock::now();
@@ -381,33 +415,39 @@ xcore::err base::Compile( void ) noexcept
         }
     }
     */
-    //
-    // Get the timer
-    //
-    if( m_LogFile.isOpen() )
+
+    try
     {
-        auto Err = m_LogFile.Printf( "------------------------------------------------------------------\n"
-                                     " Start Compilation\n"
-                                     "------------------------------------------------------------------\n" );
-        Err.clear();
+        //
+        // Get the timer
+        //
+        if( m_LogFile.isOpen() )
+        {
+            XLOG_CHANNEL_INFO(m_LogChannel, "------------------------------------------------------------------");
+            XLOG_CHANNEL_INFO(m_LogChannel, " Start Compilation" );
+            XLOG_CHANNEL_INFO(m_LogChannel, "------------------------------------------------------------------" );
+        }
+
+        //
+        // Do the actual compilation
+        //
+        if( auto Err = onCompile(); Err )
+            return Err;
+
+        //
+        // Get the timer
+        //
+        if( m_LogFile.isOpen() )
+        {
+            XLOG_CHANNEL_INFO(m_LogChannel, "------------------------------------------------------------------");
+            XLOG_CHANNEL_INFO(m_LogChannel, " Compilation Time: %fs", std::chrono::duration<float>(std::chrono::steady_clock::now() - m_Timmer).count());
+            XLOG_CHANNEL_INFO(m_LogChannel, "------------------------------------------------------------------");
+        }
     }
-
-    //
-    // Do the actual compilation
-    //
-    if( auto Err = onCompile(); Err )
-        return Err;
-
-    //
-    // Get the timer
-    //
-    if( m_LogFile.isOpen() )
+    catch (std::runtime_error RunTimeError)
     {
-        auto Err = m_LogFile.Printf( "------------------------------------------------------------------\n"
-                                     " Compilation Time: %fs\n"
-                                     "------------------------------------------------------------------\n"
-                                     , std::chrono::duration<float>(std::chrono::steady_clock::now() - m_Timmer).count() );
-        Err.clear();
+        XLOG_CHANNEL_ERROR(m_LogChannel, "Fail to create the log file [%s]", RunTimeError.what() );
+        return xerr_failure_s("exception thrown exiting...");
     }
 
     return {};
