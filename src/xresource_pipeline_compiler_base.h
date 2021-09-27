@@ -3,7 +3,13 @@ namespace xresource_pipeline::compiler
     //
     // Input to compilers
     // ------------------
-    // -BUILDTYPE Oz -TARGET WINDOWS -EDITOR "Path to the editor root" -PROJECT "Path to the project root" -RESOURCE ff.ff/ff -OUTPUT "Path to a resource .dbase"
+    // -OPTIMIZATION O1
+    // -DEBUG     D1
+    // -TARGET WINDOWS 
+    // -EDITOR "Path to the editor root" 
+    // -PROJECT "Path to the project root" 
+    // -RESOURCE ff.ff/ff 
+    // -OUTPUT "Path to a resource .dbase"
     //
     class base
     {
@@ -11,13 +17,20 @@ namespace xresource_pipeline::compiler
         
         using imported_file_fn = xcore::func< void( const xcore::cstring& FilePath ) >;
 
-        enum class build_type
+        enum class optimization_type
         { INVALID
         , O0                // Compiles the asset as fast as possible no real optimization
         , O1                // Build with optimizations
         , Oz                // Take all the time you like to optimize this resource
         };
-            
+
+        enum class debug_type
+        { INVALID
+        , D0                // Compiles with some debug
+        , D1                // Compiles with extra debug information
+        , Dz                // Runs the debug version of the compiler and such... max debug level
+        };
+
         struct platform
         {
             bool                    m_bValid            { false };                              // If we need to build for this platform
@@ -45,11 +58,14 @@ namespace xresource_pipeline::compiler
 
     protected:
         
-        build_type                                              m_BuildType             {};
+        debug_type                                              m_DebugType             { debug_type::D0 };
+        optimization_type                                       m_OptimizationType      { optimization_type::O1 };
         std::chrono::steady_clock::time_point                   m_Timmer                {};
         xcore::cstring                                          m_ProjectPath           {}; // Project or Library that contains the resource (note that this is the root)
         xcore::guid::rcfull<>                                   m_RscGuid               {}; // GUID of the resource
         xcore::cstring                                          m_EditorPath            {};
+        xcore::cstring                                          m_AssetsRootPath        {};
+
         xcore::cstring                                          m_OutputRootPath        {};
         xcore::cstring                                          m_OutputProjectPath     {};
         xcore::cstring                                          m_CompilerConfigPath    {};
@@ -58,11 +74,9 @@ namespace xresource_pipeline::compiler
         xcore::cstring                                          m_ProjectConfigPath     {};
 
         xcore::cstring                                          m_ResourcePath          {}; // Path to the asset 
-        xcore::cstring                                          m_ResourceDescriptorPath{}; // Path to the asset 
+        xcore::cstring                                          m_ResourceDescriptorPathFile{}; // Path to the asset 
 
         xcore::cstring                                          m_GeneratedPath         {};
-   //     xcore::cstring                                          m_CompiledPath          {}; // Compiled asset path for the given project/library
-   //     xcore::cstring                                          m_ExternalAssetsPath    {};
 
         xcore::cstring                                          m_BrowserPath           {};
         xcore::file::stream                                     m_LogFile               {};

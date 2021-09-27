@@ -40,6 +40,52 @@ base::base( void ) noexcept
     g_pBase = this;
 }
 
+//------------------------------------------------------------------------------
+// https://superuser.com/questions/1362080/which-characters-are-invalid-for-an-ms-dos-filename
+// Try to create a very compact resource file name
+//------------------------------------------------------------------------------
+template< typename T_CHAR, int extra_v=0, typename T > constexpr
+xcore::string::ref<T_CHAR> CompactName( T aVal ) noexcept
+{
+    static_assert(std::is_integral_v<T>);
+    using t = xcore::types::to_uint_t<T>;
+    using u = xcore::string::ref<T_CHAR>::units;
+    constexpr auto  string_capacity_v   = 64;
+    auto            String              = xcore::string::ref<T_CHAR>(u(string_capacity_v));
+    int             iCursor             = 0;
+    auto            Val                 = static_cast<t>(aVal);
+    constexpr auto  valid_chars_v       = []()consteval 
+    {
+        std::array<T_CHAR, 127*extra_v + sizeof("0123456789ABCDEFGHINKLMNOPQRSTUVWXYZ !#$%&'()-@^_`{}~.")> Array{};
+        int s;
+        if constexpr (sizeof(T_CHAR) == 1)      for(s = 0; Array.data()[s] =  "0123456789ABCDEFGHINKLMNOPQRSTUVWXYZ !#$%&'()-@^_`{}~."[s]; ++s);
+        else if constexpr (sizeof(T_CHAR) == 2) for(s = 0; Array.data()[s] = L"0123456789ABCDEFGHINKLMNOPQRSTUVWXYZ !#$%&'()-@^_`{}~."[s]; ++s);
+        else
+        {
+            xassert(false);
+        }
+
+        for( int i=0; i<(127*extra_v); ++i )
+        {
+            Array[ i + s ] = 128 + i;
+        }
+
+        return Array;
+    }();
+    constexpr auto base_v               = valid_chars_v.size();
+    do
+    {
+        const auto CVal = t(Val % base_v);
+        Val /= base_v;
+        String[u(iCursor++)] = valid_chars_v[CVal];
+
+    } while (Val > 0 && iCursor < string_capacity_v);
+
+    //  terminate string; 
+    String[u(iCursor)] = 0;
+
+    return String;
+}
 
 //--------------------------------------------------------------------------
 
@@ -98,11 +144,18 @@ xcore::err base::setupPaths( void ) noexcept
     //
     // Set the output path of the resource
     //
-    for (auto& E : m_Target)
     {
-        if (E.m_bValid)
+        auto FinalName = xcore::string::Fmt( "%s.%s", CompactName<char>(m_RscGuid.m_Type.m_Value).data()
+                                                    , CompactName<char>(m_RscGuid.m_Instance.m_Value).data() );
+
+        for (auto& E : m_Target)
         {
-            E.m_DataPath = xcore::string::Fmt("%s/%s.platform/Data", m_OutputProjectPath.data(), xcore::target::getPlatformString(E.m_Platform));
+            if (E.m_bValid)
+            {
+                E.m_DataPath = xcore::string::Fmt("%s/%s.platform/Data/%s", m_OutputProjectPath.data()
+                                                                          , xcore::target::getPlatformString(E.m_Platform)
+                                                                          , FinalName.data() );
+            }
         }
     }
 
@@ -127,7 +180,7 @@ xcore::err base::setupPaths( void ) noexcept
                                                              , m_RscGuid.m_Instance.getStringHex<char>().data()
                                                              );
 
-    m_ResourceDescriptorPath = xcore::string::Fmt("%s/Descriptor.txt", m_ResourcePath.data() );
+    m_ResourceDescriptorPathFile = xcore::string::Fmt("%s/ResourceDesc.txt", m_ResourcePath.data() );
 
     //
     // Set the Generated path
@@ -148,12 +201,14 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
     // Create the switches and their rules
     //
     {
-        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("BUILDTYPE"),  1,  1, 0, 1, false );
-        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("TARGET"),     1, -1, 1, 1, false );
-        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("EDITOR"),     1,  1, 1, 1, false );
-        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("OUTPUT"),     1,  1, 1, 1, false );
-        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("PROJECT"),    1,  1, 1, 1, true );
-        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("INPUT"),      1,  1, 1, 1, true );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("OPTIMIZATION"),  1,  1, 0, 1, false );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("DEBUG"),         1,  1, 0, 1, false );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("TARGET"),        1, -1, 1, 1, false );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("EDITOR"),        1,  1, 1, 1, false );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("OUTPUT"),        1,  1, 1, 1, false );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("ASSETS"),        1,  1, 1, 1, false );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("PROJECT"),       1,  1, 1, 1, true );
+        CmdLineParser.AddCmdSwitch( xcore::string::const_crc("INPUT"),         1,  1, 1, 1, true );
     }
     
     //
@@ -172,12 +227,16 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
                   "LION - Compiler system.                                      \n"
                   "%s [ %s - %s ]                                               \n"
                   "Switches: (Make sure they are in order)                      \n"
-                  "     -BUILDTYPE  O0 - Compile as fast as possible            \n"
-                  "                 Q1 - Compile with optimizations             \n"
-                  "                 Qz - Maximum performance for asset          \n"
+                  "     -OPTIMIZATION  O0 - Compile as fast as possible         \n"
+                  "                    Q1 - Compile with optimizations          \n"
+                  "                    Qz - Maximum performance for asset       \n"
+                  "     -DEBUG         D0 - Basic debug information             \n"
+                  "                    D1 - Extra debug information             \n"
+                  "                    Dz - Maximum debug information           \n"
                   "     -TARGET     <WINDOWS OSX IOS ANDROID PS3 TOOLS>         \n"
                   "     -EDITOR     <NetworkFriendlyPathToEditor.lion_editor>   \n"
                   "     -PROJECT    <NetworkFriendlyPathToProject.lion_project> \n"
+                  "     -ASSETS     <NetworkFriendlyPathToAssets>               \n"
                   "     -INPUT      <ASSET_GUID_FULL> Must comes after -PROJECT \n"
                   "     -OUTPUT     <NetworkFriendlyPathToResource.lion_rcdbase>\n"
                   "-------------------------------------------------------------\n",
@@ -253,6 +312,11 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
             xcore::string::Copy( m_ProjectPath, Cmd.getArgument( 0 ) );
             xcore::string::CleanPath(m_ProjectPath);
         }
+        else if (CmdCRC == xcore::types::value<xcore::crc<32>::FromString("ASSETS")>)
+        {
+            xcore::string::Copy(m_AssetsRootPath, Cmd.getArgument(0));
+            xcore::string::CleanPath(m_AssetsRootPath);
+        }
         else if( CmdCRC == xcore::types::value<xcore::crc<32>::FromString( "INPUT" )> )
         {
             if (auto Err = m_RscGuid.setupFromPath(Cmd.getArgument(0)); Err)
@@ -261,7 +325,7 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
             if( xcore::string::findLastInstance(Cmd.getArgument(0), '/') == -1 )
                 return xerr_failure_s("Badly formatted input resource expecting ttttt.ttttt/iiiiiiiii but got ttttt.ttttt.iiiiiiiii");
         }
-        else if( CmdCRC == xcore::types::value<xcore::crc<32>::FromString( "BUILDTYPE" )> )
+        else if( CmdCRC == xcore::types::value<xcore::crc<32>::FromString( "OPTIMIZATION" )> )
         {
             xcore::cstring BuildType;
 
@@ -269,19 +333,42 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
             
             if( BuildType == xcore::string::constant("O0") )
             {
-                m_BuildType = build_type::O0;
+                m_OptimizationType = optimization_type::O0;
             }
             else if( BuildType == xcore::string::constant("O1") )
             {
-                m_BuildType = build_type::O1;
+                m_OptimizationType = optimization_type::O1;
             }
             else if( BuildType == xcore::string::constant("Oz") )
             {
-                m_BuildType = build_type::Oz;
+                m_OptimizationType = optimization_type::Oz;
             }
             else
             {
-                return xerr_failure_s("Build Type not supported");
+                return xerr_failure_s("Optimization Type not supported");
+            }
+        }
+        else if( CmdCRC == xcore::types::value<xcore::crc<32>::FromString( "DEBUG" )> )
+        {
+            xcore::cstring BuildType;
+
+            xcore::string::Copy( BuildType, Cmd.getArgument( 0 ) );
+            
+            if( BuildType == xcore::string::constant("D0") )
+            {
+                m_DebugType = debug_type::D0;
+            }
+            else if( BuildType == xcore::string::constant("D1") )
+            {
+                m_DebugType = debug_type::D1;
+            }
+            else if( BuildType == xcore::string::constant("Dz") )
+            {
+                m_DebugType = debug_type::Dz;
+            }
+            else
+            {
+                return xerr_failure_s("Debug Type not supported");
             }
         }
         else
