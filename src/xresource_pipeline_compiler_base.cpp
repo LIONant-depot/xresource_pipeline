@@ -56,10 +56,10 @@ xcore::string::ref<T_CHAR> CompactName( T aVal ) noexcept
     auto            Val                 = static_cast<t>(aVal);
     constexpr auto  valid_chars_v       = []()consteval 
     {
-        std::array<T_CHAR, 127*extra_v + sizeof("0123456789ABCDEFGHINKLMNOPQRSTUVWXYZ !#$%&'()-@^_`{}~.")> Array{};
+        std::array<T_CHAR, 127*extra_v + sizeof("0123456789ABCDEFGHINKLMNOPQRSTUVWXYZ !#$%&'()-@^_`{}~")> Array{};
         int s;
-        if constexpr (sizeof(T_CHAR) == 1)      for(s = 0; Array.data()[s] =  "0123456789ABCDEFGHINKLMNOPQRSTUVWXYZ !#$%&'()-@^_`{}~."[s]; ++s);
-        else if constexpr (sizeof(T_CHAR) == 2) for(s = 0; Array.data()[s] = L"0123456789ABCDEFGHINKLMNOPQRSTUVWXYZ !#$%&'()-@^_`{}~."[s]; ++s);
+        if constexpr (sizeof(T_CHAR) == 1)      for(s = 0; Array.data()[s] =  "0123456789ABCDEFGHINKLMNOPQRSTUVWXYZ !#$%&'()-@^_`{}~"[s]; ++s);
+        else if constexpr (sizeof(T_CHAR) == 2) for(s = 0; Array.data()[s] = L"0123456789ABCDEFGHINKLMNOPQRSTUVWXYZ !#$%&'()-@^_`{}~"[s]; ++s);
         else
         {
             xassert(false);
