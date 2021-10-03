@@ -298,8 +298,8 @@ xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
         }
         else if( CmdCRC == xcore::types::value<xcore::crc<32>::FromString( "OUTPUT" )> )
         {
-            if (-1 == xcore::string::FindStr( Cmd.getArgument(0), ".lion_rcdata"))
-                return xerr_failure_s("I got a path in the OUTPUT switch that is not a .lion_rcdata path");
+            if (-1 == xcore::string::FindStr( Cmd.getArgument(0), ".lion_rcdbase"))
+                return xerr_failure_s("I got a path in the OUTPUT switch that is not a .lion_rcdbase path");
 
             xcore::string::Copy(m_OutputRootPath, Cmd.getArgument( 0 ) );
             xcore::string::CleanPath(m_OutputRootPath);
