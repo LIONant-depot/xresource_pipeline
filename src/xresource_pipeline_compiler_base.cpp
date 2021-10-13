@@ -142,6 +142,13 @@ xcore::err base::setupPaths( void ) noexcept
     }
 
     //
+    // Add the virtual resource path
+    //
+    {
+        m_VirtualRescourcePath = xcore::string::Fmt("%s/VirtualResources.dbase", m_OutputProjectPath.data() );
+    }
+
+    //
     // Set the output path of the resource
     //
     {

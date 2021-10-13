@@ -58,32 +58,34 @@ namespace xresource_pipeline::compiler
 
     protected:
         
-        debug_type                                              m_DebugType             { debug_type::D0 };
-        optimization_type                                       m_OptimizationType      { optimization_type::O1 };
-        std::chrono::steady_clock::time_point                   m_Timmer                {};
-        xcore::cstring                                          m_ProjectPath           {}; // Project or Library that contains the resource (note that this is the root)
-        xcore::guid::rcfull<>                                   m_RscGuid               {}; // GUID of the resource
-        xcore::cstring                                          m_EditorPath            {};
-        xcore::cstring                                          m_AssetsRootPath        {};
+        debug_type                                              m_DebugType                 { debug_type::D0 };
+        optimization_type                                       m_OptimizationType          { optimization_type::O1 };
+        std::chrono::steady_clock::time_point                   m_Timmer                    {};
+        xcore::cstring                                          m_ProjectPath               {}; // Project or Library that contains the resource (note that this is the root)
+        xcore::guid::rcfull<>                                   m_RscGuid                   {}; // GUID of the resource
+        xcore::cstring                                          m_EditorPath                {};
+        xcore::cstring                                          m_AssetsRootPath            {};
 
-        xcore::cstring                                          m_OutputRootPath        {};
-        xcore::cstring                                          m_OutputProjectPath     {};
-        xcore::cstring                                          m_CompilerConfigPath    {};
-        xcore::cstring                                          m_CompilerConfigPathFile{};
+        xcore::cstring                                          m_OutputRootPath            {};
+        xcore::cstring                                          m_OutputProjectPath         {};
+        xcore::cstring                                          m_CompilerConfigPath        {};
+        xcore::cstring                                          m_CompilerConfigPathFile    {};
 
-        xcore::cstring                                          m_ProjectConfigPath     {};
+        xcore::cstring                                          m_ProjectConfigPath         {};
 
-        xcore::cstring                                          m_ResourcePath          {}; // Path to the asset 
+        xcore::cstring                                          m_ResourcePath              {}; // Path to the asset 
         xcore::cstring                                          m_ResourceDescriptorPathFile{}; // Path to the asset 
 
-        xcore::cstring                                          m_GeneratedPath         {};
+        xcore::cstring                                          m_VirtualRescourcePath      {};
 
-        xcore::cstring                                          m_BrowserPath           {};
-        xcore::file::stream                                     m_LogFile               {};
-        std::array<platform, xcore::target::getPlatformCount()> m_Target                {};
-        xcore::log::channel                                     m_LogChannel            { "COMPILER" };
-        config::info                                            m_ConfigInfo            {};
-        int                                                     m_ConfigInfoIndex       {-1};
+        xcore::cstring                                          m_GeneratedPath             {};
+
+        xcore::cstring                                          m_BrowserPath               {};
+        xcore::file::stream                                     m_LogFile                   {};
+        std::array<platform, xcore::target::getPlatformCount()> m_Target                    {};
+        xcore::log::channel                                     m_LogChannel                { "COMPILER" };
+        config::info                                            m_ConfigInfo                {};
+        int                                                     m_ConfigInfoIndex           {-1};
     
     protected:
 
