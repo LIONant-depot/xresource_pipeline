@@ -81,17 +81,20 @@ namespace xresource_pipeline
     , FAILURE       
     , DISPLAY_HELP
     };
+
+
+    inline static constexpr xcore::string::constant resource_descriptor_name_v( "ResourceDesc.txt" );
+    inline static constexpr xcore::string::constant resource_dependencies_name_v("Dependencies.txt");
 }
 
 //
 //  
 //
+#include "xresource_pipeline_dependencies.h"
 #include "xresource_pipeline_config.h"
 #include "xresource_pipeline_tag.h"
 #include "xresource_pipeline_key_base.h"
 #include "xresource_pipeline_descriptor_base.h"
 #include "xresource_pipeline_compiler_base.h"
-
-
 
 #endif

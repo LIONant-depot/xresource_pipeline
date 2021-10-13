@@ -200,6 +200,27 @@ xcore::err base::setupPaths( void ) noexcept
 
 //--------------------------------------------------------------------------
 
+xcore::err base::CreateVirtualResourcePath( xcore::cstring& PathToIt, const xcore::guid::rcfull<> Rsc) const noexcept
+{
+    for (const auto& E : m_ConfigInfo.m_ResourceTypes)
+    {
+        if( E.m_FullGuid.m_Instance.m_Value == Rsc.m_Type.m_Value )
+        {
+            auto ToType = xcore::string::Fmt("%s/%s", m_VirtualRescourcePath.data(), E.m_ResourceTypeName.data());
+            if (auto Err = CreatePath(ToType); Err) return Err;
+
+            PathToIt = xcore::string::Fmt("%s/%s", ToType.data(), Rsc.m_Instance.getStringHex<char>().data() );
+            if (auto Err = CreatePath(PathToIt); Err) return Err;
+
+            return {};
+        }
+    }
+
+    return xerr_failure_s( "Fail to identify which virtual resource type we need to create" );
+}
+
+//--------------------------------------------------------------------------
+
 xcore::err base::InternalParse( const int argc, const char *argv[] ) noexcept
 {
     xcore::cmdline::parser CmdLineParser;
@@ -526,6 +547,12 @@ xcore::err base::Compile( void ) noexcept
         // Do the actual compilation
         //
         if( auto Err = onCompile(); Err )
+            return Err;
+
+        //
+        // Save the dependency file
+        //         
+        if( auto Err = m_Dependencies.Serialize( m_Dependencies, xcore::string::Fmt( "%s/%s", m_BrowserPath.data(), xresource_pipeline::resource_dependencies_name_v.data()).data(), false); Err )
             return Err;
 
         //

@@ -55,6 +55,9 @@ namespace xresource_pipeline::compiler
         virtual             xcore::err                  onCompile                   ( void )                                                        noexcept = 0;
                             xcore::err                  setupPaths                  ( void )                                                        noexcept;
                             xcore::err                  CreatePath                  ( const xcore::cstring& Path )                          const   noexcept;
+                            xcore::err                  CreateVirtualResourcePath   ( xcore::cstring& PathToIt
+                                                                                    , const xcore::guid::rcfull<> Rsc 
+                                                                                    )                                                       const   noexcept;
 
     protected:
         
@@ -86,7 +89,9 @@ namespace xresource_pipeline::compiler
         xcore::log::channel                                     m_LogChannel                { "COMPILER" };
         config::info                                            m_ConfigInfo                {};
         int                                                     m_ConfigInfoIndex           {-1};
-    
+
+        dependencies                                            m_Dependencies              {};
+
     protected:
 
         friend void LogFunction(const xcore::log::channel& Channel, xcore::log::msg_type Type, const char* String, int Line, const char* file) noexcept;
